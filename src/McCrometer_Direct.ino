@@ -1,22 +1,17 @@
 /*  Changelog
-1.3.0- Separated US3lib from main code
-1.3.1- Added reboot routine and Battery check
-1.3.2- Added Ryan's code to read RS485
-1.3.3- Added Serial debug code
+1.1.3- Initial code by Ryan
+1.2.1- Added code to monitor repeating pressure readings
+1.2.1- Reinstated boot message for pressue
 */
 
 #include "US3lib.h"
 
-String Version = "1.1.3";
+String Version = "m1.2.1";
 const bool serialDebug = true;
 
-int led1 = D0; // Instead of writing D0 over and over again, we'll write led1
-// You'll need to wire an LED to this one to see it blink.
-
-int led2 = D7; // Instead of writing D7 over and over again, we'll write led2
-// This one is the little blue LED on your board. On the Photon it is next to D7, and on the Core it is next to the USB jack.
-
 const int buttonPin = D4;
+const int excitePin = A0;
+const int analogPin = A5;
 
 long int lastStatusMessage = 0;
 long int prevTime;
@@ -27,7 +22,9 @@ long int sleepTime;
 int tripCount = 0;  
 int samplesLogged = 0;
 String payload;
+String payloadAnalog;
 String totalPayload;
+String totalPayloadAnalog;
 bool booting = true;
 int sendAttempts = 1;   // counter to indicate number of send attempt failures 
 
@@ -40,28 +37,25 @@ SYSTEM_MODE (MANUAL);
 
 void setup() {
 
-  
+  Serial.begin(19200);
   //delay(10000);
 
   pinMode(buttonPin, INPUT);
-  pinMode(led1, OUTPUT);
-  pinMode(led2, OUTPUT);
-  digitalWrite(led1, LOW);
-  digitalWrite(led2, LOW);
+  pinMode(excitePin, OUTPUT);
+  pinMode(analogPin, INPUT);
+
 
   initSyncTime();
   prevTime = Time.now();       
   delay(1000);
   sendSerialDebug("-------------Program boot------------------------------------");    
+  String an = (String)getAnalogInput();
+  sendSerialDebug(an);
+
   sendHttpRequest("Starting");
   
-  //*************************  Test  Block ********************************
-  //digitalWrite(pinRelay,HIGH);
-  //delay(3000);
-  //digitalWrite(pinRelay,LOW);
-  //**********************   End Test Block ******************************
-
   lastStatusMessage = statusMessage(Version);
+  sendBootMessage();
 }
 
 void loop() {
@@ -97,23 +91,30 @@ void loop() {
   {
 
     payload += "," + (String)tripCount;
-    samplesLogged++;
+    payloadAnalog += "," + (String)getAnalogInput(); 
+    ++samplesLogged; //RT
     prevTime = currentTime;
     
     if (((samplesLogged >= (getSendInterval() * sendAttempts)) && !sendingStatus))
     {
       if (initConnection())
       {
-        totalPayload = String(Time.now()-(60*getLogInterval()*(samplesLogged-1)));
-        totalPayload += ",1043,";
+        totalPayload = String(Time.now()-(60*getLogInterval()*(samplesLogged)));
+        totalPayloadAnalog = String(Time.now()-(60*getLogInterval()*(samplesLogged)));        
+        totalPayload += ",1043,";               
+        totalPayloadAnalog += ",1024,";        // Data type for repeating pressure readings
         totalPayload += String(getLogInterval());
+        totalPayloadAnalog += String(getLogInterval());        
         totalPayload += payload;
-        if (sendHttpRequest(totalPayload))   
+        totalPayloadAnalog += payloadAnalog;        
+        if (sendHttpRequest(totalPayload) && sendHttpRequest(totalPayloadAnalog) )   
         {
           payload = "";
+          payloadAnalog = "";
           samplesLogged = 0;
-          
+          sendAttempts = 1; //RT
         }
+
       }
       else
       {
@@ -137,10 +138,35 @@ void loop() {
   disconnectConnection();
   sendSerialDebug("after disconnectConnection()");
   delay(1000);
-  System.sleep(buttonPin, RISING , getLogInterval() * 60 );
+  System.sleep(buttonPin,FALLING , getLogInterval() * 60 ); //RT
 
 }
 
+int getAnalogInput()
+{
+  int retVal;
+  digitalWrite(excitePin,HIGH);
+  delay(1000);
+  retVal = analogRead(analogPin);
+  digitalWrite(excitePin,LOW);
+  
+  return retVal;
+
+}
+
+void sendBootMessage()
+{ 
+  if (initConnection())
+  {
+    Particle.syncTime();
+    String payload = "" ;
+    payload = String(Time.now());
+    payload += ",1024,";
+    payload += String(getLogInterval());
+    payload += "," + (String)getAnalogInput();
+    sendHttpRequest(payload);
+  }
+}
 
 void sendSerialDebug(String message)
 {

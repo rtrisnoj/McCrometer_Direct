@@ -7,5 +7,5 @@
     },
     "particle.targetPlatform": "boron",
     "particle.firmwareVersion": "1.5.2",
-    "particle.targetDevice": "e00fce68c586439815941d37"
+    "particle.targetDevice": "e00fce68c24619be715f1649"
 }

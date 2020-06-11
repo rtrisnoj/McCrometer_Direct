@@ -57,7 +57,7 @@ bool sendHttpRequest(String data){
     request.hostname = hostname;
     request.port = hostport;
     request.path = hostpath;
-    request.body = id + ";" + String(Time.now())  + "," + data;
+    request.body = id + ";"  + data;
     sendSerialDebug(request.body);
     http.get(request, response, headers);
     sendSerialDebug("After sendHTTPRequest() http.get()");
